@@ -1,12 +1,14 @@
 import hashlib
-import string
-import time
+import string # 提供現成的字元集合
+import time # Unix timestamp
 
 from sqlalchemy.orm import Session
 
 from .models import UrlMapping
 
 BASE62_CHARS = string.ascii_letters + string.digits  # a-zA-Z0-9
+# string.ascii_letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"  # 52 個
+# string.digits        = "0123456789"    10 個
 TOKEN_LENGTH = 7
 MAX_RETRIES = 10
 
@@ -29,14 +31,10 @@ def token_exists_in_db(db: Session, token: str) -> bool:
 
 def generate_token(url: str, db: Session) -> str:
     """SHA-256 + nonce + Base62 token generation with collision retry."""
-    # TODO: Implement this function
-    #
-    # Design decision: hash-based tokens give us short, deterministic-ish IDs,
-    # but we must handle collisions as the table grows.
-    #
-    # Hints:
-    # 1. Loop up to MAX_RETRIES. Each attempt: hash (url + a varying nonce)
-    #    with SHA-256, pass the digest to base62_encode(), truncate to TOKEN_LENGTH.
-    # 2. Use token_exists_in_db() to check for collisions — return on the first
-    #    free token, raise RuntimeError if all retries are exhausted.
-    raise NotImplementedError("generate_token() is not yet implemented")
+    for attempt in range(MAX_RETRIES):
+        nonce = f"{time.time()}-{attempt}"
+        digest = hashlib.sha256(f"{url}{nonce}".encode()).digest()
+        token = base62_encode(digest)[:TOKEN_LENGTH]
+        if not token_exists_in_db(db, token):
+            return token
+    raise RuntimeError("Failed to generate a unique token after max retries")
