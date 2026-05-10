@@ -1,12 +1,14 @@
 import io
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 
 import qrcode
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import RedirectResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from .blob_storage import get_blob_url, upload_qr_png
 from .database import get_db
 from .models import ScanEvent, UrlMapping
 from .schemas import CreateRequest, CreateResponse, QRInfoResponse, UpdateRequest
@@ -18,7 +20,7 @@ router = APIRouter()
 # In-memory cache (simulates Redis for prototype)
 redirect_cache: dict[str, str] = {}
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 
 
 @router.post("/api/qr/create", response_model=CreateResponse)
@@ -39,6 +41,12 @@ def create_qr(req: CreateRequest, db: Session = Depends(get_db)):
 
     short_url = f"{BASE_URL}/r/{token}"
 
+    # Generate QR code and upload to Blob Storage
+    qr_img = qrcode.make(short_url)
+    buf = io.BytesIO()
+    qr_img.save(buf, format="PNG")
+    upload_qr_png(token, buf.getvalue())
+
     # Warm cache
     redirect_cache[token] = normalized_url
 
@@ -52,19 +60,25 @@ def create_qr(req: CreateRequest, db: Session = Depends(get_db)):
 
 @router.get("/r/{token}")
 def redirect(token: str, request: Request, db: Session = Depends(get_db)):
-    """Redirect fallback flow: Cache -> DB -> 404/410 (from slides mermaid diagram)"""
-    # TODO: Implement this function
-    #
-    # Design decision: the redirect path is the hottest path in the system, so
-    # we use a cache-first strategy (Cache -> DB -> 404/410) to minimize DB load
-    # while still handling soft-deleted and expired links.
-    #
-    # Hints:
-    # 1. Check redirect_cache first — on hit, call _record_scan() and return
-    #    RedirectResponse(status_code=302).
-    # 2. On miss, query the DB: raise 404 if not found, 410 if is_deleted or
-    #    past expires_at; otherwise warm the cache, _record_scan(), and 302.
-    raise NotImplementedError("redirect() is not yet implemented")
+    """Redirect fallback flow: Cache -> DB -> 404/410"""
+    # 1. Cache hit
+    if token in redirect_cache:
+        _record_scan(token, request, db)
+        return RedirectResponse(url=redirect_cache[token], status_code=302)
+
+    # 2. Cache miss → query DB
+    mapping = db.query(UrlMapping).filter(UrlMapping.token == token).first()
+
+    if mapping is None or mapping.is_deleted:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    if mapping.expires_at and mapping.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
+        raise HTTPException(status_code=410, detail="Gone")
+
+    # Warm cache and redirect
+    redirect_cache[token] = mapping.original_url
+    _record_scan(token, request, db)
+    return RedirectResponse(url=mapping.original_url, status_code=302)
 
 
 @router.get("/api/qr/{token}", response_model=QRInfoResponse)
@@ -108,13 +122,8 @@ def delete_qr(token: str, db: Session = Depends(get_db)):
 @router.get("/api/qr/{token}/image")
 def get_qr_image(token: str, db: Session = Depends(get_db)):
     _get_mapping_or_404(token, db)
-    short_url = f"{BASE_URL}/r/{token}"
-
-    img = qrcode.make(short_url)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    return StreamingResponse(buf, media_type="image/png")
+    blob_url = get_blob_url(token)
+    return RedirectResponse(url=blob_url, status_code=302)
 
 
 @router.get("/api/qr/{token}/analytics")
