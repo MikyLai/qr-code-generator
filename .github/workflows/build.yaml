@@ -1,0 +1,137 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+
+    
+concurrency:
+  group: build-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: read-all
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.bump_version.outputs.new_tag }}
+    steps:
+      - uses: actions/checkout@v6
+      # workaround: Enable WITH_V only on main branch due to a known bug in github-tag-action
+      - name: bump version and push tag
+        uses: anothrNick/github-tag-action@v1
+        id: bump_version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BRANCHES: main
+          PRERELEASE: true
+          WITH_V: ${{ github.ref == 'refs/heads/main' && true || false }}
+
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: tag
+    env:
+      TAG: ${{ needs.tag.outputs.tag }}
+      POETRY_VIRTUALENVS_IN_PROJECT: "true"
+      PUBLISH_VERSION: ${{ github.ref == 'refs/heads/main' && needs.tag.outputs.tag || format('v{0}', needs.tag.outputs.tag) }}-${{ github.run_number }}
+      PYPI_VERSION: ${{ github.ref == 'refs/heads/main' && format('{0}.{1}', needs.tag.outputs.tag, github.run_number) || format('{0}.post.{1}', needs.tag.outputs.tag, github.run_number) }}
+
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
+        
+
+      - name: Install dependencies
+        if: ${{ success() && hashFiles('**/Dockerfile') == '' }}
+        run: pip install -r requirements.txt
+
+      - name: Pre-install dependencies into vendor/ for Docker build
+        if: ${{ success() && hashFiles('**/Dockerfile') != '' }}
+        run: |
+          set -eu
+          shopt -s globstar
+          for dockerfile in **/Dockerfile; do
+            [[ "$dockerfile" == "**/Dockerfile" ]] && break
+            dir="$(dirname "$dockerfile")"
+            pip install -r "${dir}/requirements.txt" --target "${dir}/vendor"
+          done
+
+      - name: Build Docker Images
+        if: ${{ success() && hashFiles('**/Dockerfile') != '' }}
+        run: |
+          set -eu
+          shopt -s globstar
+
+          for dockerfile in **/Dockerfile; do
+            [[ "$dockerfile" == "**/Dockerfile" ]] && break
+            pushd "$(dirname "$dockerfile")"
+
+            project_name=$(basename "$(pwd)")
+            full_image_path="${BASE_IMAGE_PATH}/${project_name}"
+
+            jq -cnr \
+              --arg name "image:${SHORT_REPO_NAME}/${project_name}" \
+              --arg repo "$GITHUB_REPOSITORY" \
+              --arg version "$PUBLISH_VERSION" \
+              '{name: $name, version: $version, repositoryName: $repo}' >> "$SNOW_ARTIFACT_FILE"
+
+            grep FROM Dockerfile | cut -d ' ' -f 2 | xargs -n 1 jf docker pull
+
+            jf docker build \
+              --annotation com.nisa.dockerfile-path="$dockerfile" \
+              --annotation com.nisa.git.commit.sha="$GITHUB_SHA" \
+              --annotation com.nisa.github.repo="$SHORT_REPO_NAME" \
+              --label com.nisa.git.commit.sha="$GITHUB_SHA" \
+              --label com.nisa.github.repo="$SHORT_REPO_NAME" \
+              --tag "${full_image_path}:${PUBLISH_VERSION}" .
+
+            popd
+          done
+
+          docker image ls
+
+      - name: Collect ServiceNow Artifacts
+        id: collect-snow-artifacts
+        run: |
+          set -eu
+          artifacts=$(jq -crs '.' < "${SNOW_ARTIFACT_FILE}")
+          echo "snow-artifacts=${artifacts}" >> "$GITHUB_OUTPUT"
+
+      - name: ServiceNow DevOps Register Artifact
+        if: ${{ success() && hashFiles('**/Dockerfile') != '' }}
+        uses: ServiceNow/servicenow-devops-register-artifact@v5.1.0
+        with:
+          devops-integration-token: ${{ secrets.SN_TOKEN }}
+          instance-url: ${{ vars.SN_URL }}
+          tool-id: ${{ vars.SN_TOOL_ID }}
+          job-name: build / build
+          context-github: ${{ toJSON(github) }}
+          artifacts: ${{ steps.collect-snow-artifacts.outputs.snow-artifacts }}
+
+      - name: Build PyPI packages
+        id: pypi_source
+        if: ${{ success() && inputs.is-package == true }}
+        run: |
+          set -eu
+          poetry version "${PYPI_VERSION}"
+          poetry build
+
+          cd dist
+          for pypi_package in *.tar.gz *.whl; do
+            pypi_packages+="dist/${pypi_package} "
+          done
+
+          echo "PYPI_SOURCE=${pypi_packages}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload PyPI packages
+        if: ${{ success() && github.repository_owner == 'nisa-emu-it' && inputs.is-package == true }}
+        uses: nisa-emu-it/cicd-github-action-pipeline-jfrog-upload@v1.1.0
+        with:
+          source: ${{ steps.pypi_source.outputs.PY_
