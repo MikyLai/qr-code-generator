@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Code Generator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f5f5f5; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 16px; }
+    h1 { font-size: 1.8rem; margin-bottom: 32px; color: #1a1a1a; }
+
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); padding: 28px; width: 100%; max-width: 480px; margin-bottom: 24px; }
+
+    label { font-size: .85rem; font-weight: 600; color: #555; display: block; margin-bottom: 6px; }
+    input[type="url"], input[type="text"] {
+      width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px;
+      font-size: 1rem; outline: none; transition: border-color .2s;
+    }
+    input:focus { border-color: #6366f1; }
+
+    button {
+      width: 100%; padding: 11px; border: none; border-radius: 8px;
+      font-size: 1rem; font-weight: 600; cursor: pointer; transition: background .2s;
+    }
+    .btn-primary { background: #6366f1; color: #fff; margin-top: 16px; }
+    .btn-primary:hover { background: #4f46e5; }
+    .btn-danger  { background: #ef4444; color: #fff; margin-top: 10px; }
+    .btn-danger:hover  { background: #dc2626; }
+    .btn-secondary { background: #e5e7eb; color: #374151; margin-top: 10px; }
+    .btn-secondary:hover { background: #d1d5db; }
+
+    #result { display: none; }
+    #qr-img { display: block; margin: 0 auto 20px; max-width: 220px; border-radius: 8px; border: 1px solid #eee; }
+
+    .info-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .info-row span { flex: 1; font-size: .9rem; color: #374151; word-break: break-all; }
+    .copy-btn { padding: 5px 12px; font-size: .8rem; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; cursor: pointer; white-space: nowrap; }
+    .copy-btn:hover { background: #f3f4f6; }
+
+    .edit-section { margin-top: 16px; border-top: 1px solid #f0f0f0; padding-top: 16px; display: none; }
+    .error { color: #ef4444; font-size: .85rem; margin-top: 8px; }
+    .success { color: #22c55e; font-size: .85rem; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>QR Code Generator</h1>
+
+  <!-- 建立表單 -->
+  <div class="card">
+    <label for="url-input">目標網址</label>
+    <input type="url" id="url-input" placeholder="https://example.com" />
+    <label for="expires-input" style="margin-top:14px">到期時間（選填）</label>
+    <input type="text" id="expires-input" placeholder="2026-12-31T00:00:00" />
+    <button class="btn-primary" onclick="createQR()">產生 QR Code</button>
+    <div id="create-msg"></div>
+  </div>
+
+  <!-- 結果 -->
+  <div class="card" id="result">
+    <img id="qr-img" src="" alt="QR Code" />
+
+    <div class="info-row">
+      <span id="short-url-text"></span>
+      <button class="copy-btn" onclick="copy('short-url-text')">複製</button>
+    </div>
+    <div class="info-row">
+      <span id="original-url-text"></span>
+    </div>
+
+    <!-- 更新 URL -->
+    <div class="edit-section" id="edit-section">
+      <label>更新目標網址</label>
+      <input type="url" id="new-url-input" placeholder="https://new-url.com" />
+      <button class="btn-secondary" onclick="updateQR()">更新</button>
+      <div id="update-msg"></div>
+    </div>
+
+    <button class="btn-secondary" onclick="toggleEdit()">✏️ 更新目標網址</button>
+    <button class="btn-danger" onclick="deleteQR()">🗑️ 刪除</button>
+    <div id="delete-msg"></div>
+  </div>
+
+  <script>
+    let currentToken = null;
+
+    async function createQR() {
+      const url = document.getElementById('url-input').value.trim();
+      const expires = document.getElementById('expires-input').value.trim();
+      const msg = document.getElementById('create-msg');
+      msg.textContent = '';
+
+      if (!url) { msg.className = 'error'; msg.textContent = '請輸入網址'; return; }
+
+      const body = { url };
+      if (expires) body.expires_at = expires;
+
+      try {
+        const res = await fetch('/api/qr/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          msg.className = 'error';
+          msg.textContent = err.detail || '發生錯誤';
+          return;
+        }
+        const data = await res.json();
+        currentToken = data.token;
+        showResult(data);
+      } catch (e) {
+        msg.className = 'error'; msg.textContent = '連線失敗';
+      }
+    }
+
+    function showResult(data) {
+      document.getElementById('result').style.display = 'block';
+      document.getElementById('qr-img').src = data.qr_code_url;
+      document.getElementById('short-url-text').textContent = data.short_url;
+      document.getElementById('original-url-text').textContent = '→ ' + data.original_url;
+      document.getElementById('delete-msg').textContent = '';
+      document.getElementById('edit-section').style.display = 'none';
+    }
+
+    async function updateQR() {
+      const newUrl = document.getElementById('new-url-input').value.trim();
+      const msg = document.getElementById('update-msg');
+      if (!newUrl) { msg.className = 'error'; msg.textContent = '請輸入新網址'; return; }
+
+      try {
+        const res = await fetch(`/api/qr/${currentToken}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: newUrl }),
+        });
+        if (!res.ok) { msg.className = 'error'; msg.textContent = '更新失敗'; return; }
+        const data = await res.json();
+        document.getElementById('original-url-text').textContent = '→ ' + data.original_url;
+        msg.className = 'success'; msg.textContent = '更新成功';
+      } catch (e) {
+        msg.className = 'error'; msg.textContent = '連線失敗';
+      }
+    }
+
+    async function deleteQR() {
+      if (!confirm('確定要刪除這個 QR Code 嗎？')) return;
+      const msg = document.getElementById('delete-msg');
+      try {
+        const res = await fetch(`/api/qr/${currentToken}`, { method: 'DELETE' });
+        if (!res.ok) { msg.className = 'error'; msg.textContent = '刪除失敗'; return; }
+        msg.className = 'success'; msg.textContent = '已刪除，掃描將回傳 404';
+        document.getElementById('qr-img').style.opacity = '0.3';
+      } catch (e) {
+        msg.className = 'error'; msg.textContent = '連線失敗';
+      }
+    }
+
+    function toggleEdit() {
+      const s = document.getElementById('edit-section');
+      s.style.display = s.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function copy(id) {
+      const text = document.getElementById(id).textContent;
+      navigator.clipboard.writeText(text).then(() => alert('已複製！'));
+    }
+  </script>
+</body>
+</html>
