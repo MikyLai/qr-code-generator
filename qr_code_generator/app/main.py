@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .blob_storage import ensure_container
 from .database import Base, engine
@@ -17,3 +19,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="QR Code Generator Prototype", lifespan=lifespan)
 app.include_router(router)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/")
+def index():
+    return FileResponse("static/index.html")
