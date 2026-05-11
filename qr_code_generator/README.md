@@ -21,11 +21,14 @@
 **Prerequisite:** Python 3.10 or higher
 
 ```bash
-cd scaffold
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+deactivate
 ```
+or
+` pip install -r requirements.txt --target vendor/`
+
 
 ### Files to Fill In
 
