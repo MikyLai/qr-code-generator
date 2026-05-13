@@ -68,7 +68,7 @@ jobs:
         with:
             context: qr_code_generator
             push: true
-            tags: ghcr.io/${{ github.repository }}:${{ env.PUBLISH_VERSION }}
+            tags: ghcr.io/${GITHUB_REPOSITORY,,}:${{ env.PUBLISH_VERSION }}
             
 
       
