@@ -63,12 +63,16 @@ jobs:
             username: ${{ github.actor }}
             password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Compute lowercase image name
+        id: image_name
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
             context: qr_code_generator
             push: true
-            tags: ghcr.io/${GITHUB_REPOSITORY,,}:${{ env.PUBLISH_VERSION }}
+            tags: ${{ steps.image_name.outputs.name }}:${{ env.PUBLISH_VERSION }}
             
 
       
