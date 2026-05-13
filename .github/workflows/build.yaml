@@ -50,7 +50,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version-file: .python-version
+          python-version-file: qr_code_generator/.python-version
         
 
       - name: Install dependencies
@@ -61,7 +61,8 @@ jobs:
         with:
             registry: ghcr.io
             username: ${{ github.actor }}
-            password: ${{ secrets.GITHUB_TOKEN }}  
+            password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:

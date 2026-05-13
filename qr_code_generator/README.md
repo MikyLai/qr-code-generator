@@ -40,8 +40,19 @@ or
 
 ### Run and Verify
 
+###  docker network command
+`docker network create {NAME}`
+`docker network rm {NAME}`
+`docker network ls`
+
 ```bash
+
+docker run -d --name azurite --network qrnet -p 10000:10000 mcr.microsoft.com/azure-storage/azurite
+
+export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://localhost:10000/devstoreaccount1;"
+
 uvicorn app.main:app --reload
+
 ```
 
 Then run the verification tests from `PROMPT.md`.
@@ -51,3 +62,20 @@ Then run the verification tests from `PROMPT.md`.
 - Build a simple frontend (input URL → display QR code image)
 - Add rate limiting to the create endpoint
 - Add expiration support with automatic 410 responses
+
+## Run container
+
+```
+
+docker run --rm --name qr-api --network qrnet -p 8000:8000 \
+  -e BASE_URL=http://localhost:8000 \
+  -e DATABASE_URL=sqlite:///./qr_code.db \
+  -e BLOB_PUBLIC_HOST=localhost:10000 \
+  -e AZURE_STORAGE_CONNECTION_STRING='DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;' \
+  -e AZURE_BLOB_CONTAINER=qr-codes \
+  qr-generator:v0.1.0
+
+  curl -X POST http://localhost:8000/api/qr/create \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://google.com"}'
+  ```

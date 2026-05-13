@@ -17,6 +17,11 @@ AZURE_STORAGE_CONNECTION_STRING = os.getenv(
 )
 CONTAINER_NAME = os.getenv("AZURE_BLOB_CONTAINER", "qr-codes")
 
+# Override the host:port used in public-facing blob URLs (e.g. browser redirects).
+# Useful when the internal Docker hostname (e.g. "azurite") differs from what the
+# browser can reach (e.g. "localhost").
+BLOB_PUBLIC_HOST = os.getenv("BLOB_PUBLIC_HOST", "")
+
 
 def _get_service_client() -> BlobServiceClient:
     return BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
@@ -48,4 +53,9 @@ def get_blob_url(token: str) -> str:
     """回傳指定 token 的 blob 公開 URL（不驗證是否存在）。"""
     client = _get_service_client()
     blob_client = client.get_blob_client(container=CONTAINER_NAME, blob=f"{token}.png")
-    return blob_client.url
+    url = blob_client.url
+    if BLOB_PUBLIC_HOST:
+        from urllib.parse import urlparse, urlunparse
+        parsed = urlparse(url)
+        url = urlunparse(parsed._replace(netloc=BLOB_PUBLIC_HOST))
+    return url
