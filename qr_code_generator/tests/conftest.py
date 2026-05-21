@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app
@@ -21,7 +22,9 @@ TEST_DATABASE_URL = "sqlite://"
 @pytest.fixture()
 def client():
     engine = create_engine(
-        TEST_DATABASE_URL, connect_args={"check_same_thread": False}
+        TEST_DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     TestingSession = sessionmaker(bind=engine)
     Base.metadata.create_all(bind=engine)
@@ -37,7 +40,6 @@ def client():
 
     # Mock 所有 blob storage 呼叫，不需要 Azurite
     with patch("app.routes.upload_qr_png", return_value=None), \
-         patch("app.routes.get_blob_url", return_value="http://fake-blob/token.png"), \
          patch("app.blob_storage.ensure_container", return_value=None):
         with TestClient(app) as c:
             yield c
