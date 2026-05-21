@@ -4,11 +4,11 @@ from datetime import datetime, timezone
 
 import qrcode
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .blob_storage import get_blob_url, upload_qr_png
+from .blob_storage import download_qr_png, get_blob_url, upload_qr_png
 from .database import get_db
 from .models import ScanEvent, UrlMapping
 from .schemas import CreateRequest, CreateResponse, QRInfoResponse, UpdateRequest
@@ -122,8 +122,8 @@ def delete_qr(token: str, db: Session = Depends(get_db)):
 @router.get("/api/qr/{token}/image")
 def get_qr_image(token: str, db: Session = Depends(get_db)):
     _get_mapping_or_404(token, db)
-    blob_url = get_blob_url(token)
-    return RedirectResponse(url=blob_url, status_code=302)
+    png_bytes = download_qr_png(token)
+    return Response(content=png_bytes, media_type="image/png")
 
 
 @router.get("/api/qr/{token}/analytics")

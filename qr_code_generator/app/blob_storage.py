@@ -59,3 +59,10 @@ def get_blob_url(token: str) -> str:
         parsed = urlparse(url)
         url = urlunparse(parsed._replace(netloc=BLOB_PUBLIC_HOST))
     return url
+
+
+def download_qr_png(token: str) -> bytes:
+    """從 Blob Storage 下載 QR Code PNG bytes（不需要公開存取權限）。"""
+    client = _get_service_client()
+    blob_client = client.get_blob_client(container=CONTAINER_NAME, blob=f"{token}.png")
+    return blob_client.download_blob().readall()
