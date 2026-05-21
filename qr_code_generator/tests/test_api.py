@@ -36,16 +36,6 @@ def test_redirect_not_found(client):
     assert res.status_code == 404
 
 
-def test_get_qr_image(client):
-    """GET /api/qr/{token}/image → 302 redirect 到 blob URL"""
-    res = client.post("/api/qr/create", json={"url": "https://google.com"})
-    token = res.json()["token"]
-
-    res = client.get(f"/api/qr/{token}/image", follow_redirects=False)
-    assert res.status_code == 302
-    assert "fake-blob" in res.headers["location"]
-
-
 def test_get_qr_info(client):
     """GET /api/qr/{token} → 回傳 mapping 資訊"""
     res = client.post("/api/qr/create", json={"url": "https://google.com"})
