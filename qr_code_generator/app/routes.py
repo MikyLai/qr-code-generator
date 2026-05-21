@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .blob_storage import get_blob_url, upload_qr_png
+from .blob_storage import generate_sas_url, upload_qr_png
 from .database import get_db
 from .models import ScanEvent, UrlMapping
 from .schemas import CreateRequest, CreateResponse, QRInfoResponse, UpdateRequest
@@ -53,7 +53,7 @@ def create_qr(req: CreateRequest, db: Session = Depends(get_db)):
     return CreateResponse(
         token=token,
         short_url=short_url,
-        qr_code_url=f"{BASE_URL}/api/qr/{token}/image",
+        qr_code_url=generate_sas_url(token),
         original_url=normalized_url,
     )
 
@@ -117,13 +117,6 @@ def delete_qr(token: str, db: Session = Depends(get_db)):
     # Invalidate cache
     redirect_cache.pop(token, None)
     return {"detail": "Deleted"}
-
-
-@router.get("/api/qr/{token}/image")
-def get_qr_image(token: str, db: Session = Depends(get_db)):
-    _get_mapping_or_404(token, db)
-    blob_url = get_blob_url(token)
-    return RedirectResponse(url=blob_url, status_code=302)
 
 
 @router.get("/api/qr/{token}/analytics")

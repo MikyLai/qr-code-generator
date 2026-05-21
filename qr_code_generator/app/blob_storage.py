@@ -1,6 +1,7 @@
 import os
+from datetime import datetime, timedelta
 
-from azure.storage.blob import BlobServiceClient, ContentSettings
+from azure.storage.blob import BlobSasPermissions, BlobServiceClient, ContentSettings, generate_blob_sas
 
 # Azurite local default connection string (used when env var not set)
 # "UseDevelopmentStorage=true" is the official shorthand for Azurite
@@ -49,11 +50,20 @@ def upload_qr_png(token: str, png_bytes: bytes) -> str:
     return blob_client.url
 
 
-def get_blob_url(token: str) -> str:
-    """回傳指定 token 的 blob 公開 URL（不驗證是否存在）。"""
+def generate_sas_url(token: str, expiry_hours: int = 24) -> str:
+    """產生指定 token QR Code 圖片的 SAS URL，預設有效期 24 小時。"""
     client = _get_service_client()
+    account_key = client.credential.account_key
+    sas_token = generate_blob_sas(
+        account_name=client.account_name,
+        container_name=CONTAINER_NAME,
+        blob_name=f"{token}.png",
+        account_key=account_key,
+        permission=BlobSasPermissions(read=True),
+        expiry=datetime.utcnow() + timedelta(hours=expiry_hours),
+    )
     blob_client = client.get_blob_client(container=CONTAINER_NAME, blob=f"{token}.png")
-    url = blob_client.url
+    url = f"{blob_client.url}?{sas_token}"
     if BLOB_PUBLIC_HOST:
         from urllib.parse import urlparse, urlunparse
         parsed = urlparse(url)
