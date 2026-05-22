@@ -18,7 +18,8 @@ from .url_validator import validate_url
 router = APIRouter()
 
 # In-memory cache (simulates Redis for prototype)
-redirect_cache: dict[str, str] = {}
+# None as sentinel = negative cache (token not found / deleted)
+redirect_cache: dict[str, str | None] = {}
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 
@@ -63,16 +64,21 @@ def redirect(token: str, request: Request, db: Session = Depends(get_db)):
     """Redirect fallback flow: Cache -> DB -> 404/410"""
     # 1. Cache hit
     if token in redirect_cache:
+        cached = redirect_cache[token]
+        if cached is None:  # negative cache hit
+            raise HTTPException(status_code=404, detail="Not Found")
         _record_scan(token, request, db)
-        return RedirectResponse(url=redirect_cache[token], status_code=302)
+        return RedirectResponse(url=cached, status_code=302)
 
     # 2. Cache miss → query DB
     mapping = db.query(UrlMapping).filter(UrlMapping.token == token).first()
 
     if mapping is None or mapping.is_deleted:
+        redirect_cache[token] = None  # negative cache
         raise HTTPException(status_code=404, detail="Not Found")
 
     if mapping.expires_at and mapping.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
+        redirect_cache[token] = None  # negative cache
         raise HTTPException(status_code=410, detail="Gone")
 
     # Warm cache and redirect
