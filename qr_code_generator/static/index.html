@@ -34,8 +34,8 @@
 
     .info-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
     .info-row span { flex: 1; font-size: .9rem; color: #374151; word-break: break-all; }
-    .copy-btn { width: auto; padding: 5px 12px; font-size: .8rem; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; cursor: pointer; white-space: nowrap; }
-    .copy-btn:hover { background: #f3f4f6; }
+    .copy-btn { width: auto; padding: 5px 12px; font-size: .8rem; border: 1px solid #f9a8d4; border-radius: 6px; background: #fce7f3; color: #be185d; cursor: pointer; white-space: nowrap; }
+    .copy-btn:hover { background: #dd64a8; }
 
     .edit-section { margin-top: 16px; border-top: 1px solid #f0f0f0; padding-top: 16px; display: none; }
     .error { color: #ef4444; font-size: .85rem; margin-top: 8px; }
@@ -61,7 +61,7 @@
 
     <div class="info-row">
       <span id="original-url-text"></span>
-      <button class="copy-btn" onclick="copyOriginalUrl()">複製</button>
+      <button class="copy-btn" onclick="copyQRImage()">Copy QR Code</button>
     </div>
 
     <!-- 更新 URL -->
@@ -79,7 +79,6 @@
 
   <script>
     let currentToken = null;
-    let currentOriginalUrl = null;
 
     async function createQR() {
       const url = document.getElementById('url-input').value.trim();
@@ -113,7 +112,6 @@
     }
 
     function showResult(data) {
-      currentOriginalUrl = data.original_url;
       document.getElementById('result').style.display = 'block';
       document.getElementById('qr-img').src = data.qr_code_url;
       document.getElementById('original-url-text').textContent = '→ ' + data.original_url;
@@ -159,9 +157,15 @@
       s.style.display = s.style.display === 'none' ? 'block' : 'none';
     }
 
-    function copyOriginalUrl() {
-      if (currentOriginalUrl) {
-        navigator.clipboard.writeText(currentOriginalUrl).then(() => alert('已複製！'));
+    async function copyQRImage() {
+      try {
+        const img = document.getElementById('qr-img');
+        const res = await fetch(img.src);
+        const blob = await res.blob();
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        alert('已複製 QR Code 圖片！');
+      } catch (e) {
+        alert('複製失敗：' + e.message);
       }
     }
 
