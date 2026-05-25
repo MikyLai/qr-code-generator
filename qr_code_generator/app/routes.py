@@ -23,6 +23,10 @@ redirect_cache: dict[str, str] = {}
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 
 
+@router.get("/health")
+def health_check():
+    return {"status": "ok"}
+
 @router.post("/api/qr/create", response_model=CreateResponse)
 def create_qr(req: CreateRequest, db: Session = Depends(get_db)):
     try:                                                                                                                                                           
