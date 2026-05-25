@@ -60,10 +60,6 @@
     <img id="qr-img" src="" alt="QR Code" />
 
     <div class="info-row">
-      <span id="short-url-text"></span>
-      <button class="copy-btn" onclick="copy('short-url-text')">複製</button>
-    </div>
-    <div class="info-row">
       <span id="original-url-text"></span>
     </div>
 
@@ -117,7 +113,6 @@
     function showResult(data) {
       document.getElementById('result').style.display = 'block';
       document.getElementById('qr-img').src = data.qr_code_url;
-      document.getElementById('short-url-text').textContent = data.short_url;
       document.getElementById('original-url-text').textContent = '→ ' + data.original_url;
       document.getElementById('delete-msg').textContent = '';
       document.getElementById('edit-section').style.display = 'none';
