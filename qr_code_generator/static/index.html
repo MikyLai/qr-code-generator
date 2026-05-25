@@ -61,6 +61,7 @@
 
     <div class="info-row">
       <span id="original-url-text"></span>
+      <button class="copy-btn" onclick="copyOriginalUrl()">複製</button>
     </div>
 
     <!-- 更新 URL -->
@@ -78,6 +79,7 @@
 
   <script>
     let currentToken = null;
+    let currentOriginalUrl = null;
 
     async function createQR() {
       const url = document.getElementById('url-input').value.trim();
@@ -111,6 +113,7 @@
     }
 
     function showResult(data) {
+      currentOriginalUrl = data.original_url;
       document.getElementById('result').style.display = 'block';
       document.getElementById('qr-img').src = data.qr_code_url;
       document.getElementById('original-url-text').textContent = '→ ' + data.original_url;
@@ -156,10 +159,12 @@
       s.style.display = s.style.display === 'none' ? 'block' : 'none';
     }
 
-    function copy(id) {
-      const text = document.getElementById(id).textContent;
-      navigator.clipboard.writeText(text).then(() => alert('已複製！'));
+    function copyOriginalUrl() {
+      if (currentOriginalUrl) {
+        navigator.clipboard.writeText(currentOriginalUrl).then(() => alert('已複製！'));
+      }
     }
+
   </script>
 </body>
 </html>
